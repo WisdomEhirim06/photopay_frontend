@@ -8,7 +8,7 @@ import { Explore } from './pages/Explore';
 import { CreateListing } from './pages/CreateListing';
 import { ListingDetail } from './pages/ListingDetail';
 import { PurchaseSuccess } from './pages/PurchaseSuccess';
-
+import { Dashboard } from './pages/Dashboard';
 function App() {
   return (
     <Router>
@@ -22,6 +22,7 @@ function App() {
               <Route path="/create" element={<CreateListing />} />
               <Route path="/listing/:id" element={<ListingDetail />} />
               <Route path="/success" element={<PurchaseSuccess />} />
+              <Route path="/dashboard" element={<Dashboard />} />
             </Routes>
           </main>
           <Footer />

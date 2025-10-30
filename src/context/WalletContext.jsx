@@ -78,24 +78,29 @@ export const WalletProvider = ({ children }) => {
     }
 
     try {
-      // Import Solana web3.js
-      const { Transaction, SystemProgram, PublicKey, Connection } = await import('@solana/web3.js');
+      const { Transaction, SystemProgram, PublicKey, Connection, ComputeBudgetProgram } = await import('@solana/web3.js');
 
-      // Create connection to devnet (or mainnet for production)
       const connection = new Connection(
         'https://api.devnet.solana.com',
-        'confirmed'
+        { commitment: 'confirmed', confirmTransactionInitialTimeout: 60000 }
       );
 
-      // Get a FRESH blockhash right before creating transaction
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized');
+      const { blockhash } = await connection.getLatestBlockhash('finalized');
 
-      // Build transaction with fresh blockhash
-      const transaction = new Transaction({
-        feePayer: new PublicKey(transactionData.from_pubkey),
-        blockhash: blockhash,
-        lastValidBlockHeight: lastValidBlockHeight,
-      }).add(
+      const transaction = new Transaction();
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = new PublicKey(transactionData.from_pubkey);
+      
+      // Add priority fee if provided by Sanctum Gateway
+      if (transactionData.priority_fee) {
+        transaction.add(
+          ComputeBudgetProgram.setComputeUnitPrice({
+            microLamports: transactionData.priority_fee
+          })
+        );
+      }
+      
+      transaction.add(
         SystemProgram.transfer({
           fromPubkey: new PublicKey(transactionData.from_pubkey),
           toPubkey: new PublicKey(transactionData.to_pubkey),
@@ -103,42 +108,21 @@ export const WalletProvider = ({ children }) => {
         })
       );
 
-      // Sign transaction with Phantom
       const { signature } = await window.solana.signAndSendTransaction(transaction);
-
-      // Wait for confirmation with timeout
-      const confirmation = await Promise.race([
-        connection.confirmTransaction({
-          signature,
-          blockhash,
-          lastValidBlockHeight,
-        }, 'confirmed'),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Transaction confirmation timeout')), 60000)
-        )
-      ]);
-
-      if (confirmation.value.err) {
-        throw new Error('Transaction failed on chain');
-      }
+      await connection.confirmTransaction(signature, 'confirmed');
 
       return signature;
 
     } catch (error) {
       console.error('Transaction error:', error);
       
-      // Provide more helpful error messages
-      if (error.message.includes('User rejected')) {
-        throw new Error('Transaction rejected by user');
-      } else if (error.message.includes('insufficient funds')) {
-        throw new Error('Insufficient SOL balance');
-      } else if (error.message.includes('blockhash')) {
-        throw new Error('Transaction expired. Please try again');
-      } else if (error.message.includes('timeout')) {
-        throw new Error('Transaction confirmation timeout. Check Solana Explorer');
+      if (error.message?.includes('rejected')) {
+        throw new Error('Transaction rejected');
+      } else if (error.message?.includes('insufficient')) {
+        throw new Error('Insufficient SOL');
       }
       
-      throw error;
+      throw new Error(error.message || 'Transaction failed');
     }
   };
 
