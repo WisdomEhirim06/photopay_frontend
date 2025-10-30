@@ -78,27 +78,15 @@ export const WalletProvider = ({ children }) => {
     }
 
     try {
-      const { Transaction, SystemProgram, PublicKey, Connection, ComputeBudgetProgram } = await import('@solana/web3.js');
+      const { Transaction, SystemProgram, PublicKey, Connection } = await import('@solana/web3.js');
 
-      const connection = new Connection(
-        'https://api.devnet.solana.com',
-        { commitment: 'confirmed', confirmTransactionInitialTimeout: 60000 }
-      );
+      const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
 
-      const { blockhash } = await connection.getLatestBlockhash('finalized');
+      const { blockhash } = await connection.getLatestBlockhash();
 
       const transaction = new Transaction();
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = new PublicKey(transactionData.from_pubkey);
-      
-      // Add priority fee if provided by Sanctum Gateway
-      if (transactionData.priority_fee) {
-        transaction.add(
-          ComputeBudgetProgram.setComputeUnitPrice({
-            microLamports: transactionData.priority_fee
-          })
-        );
-      }
       
       transaction.add(
         SystemProgram.transfer({
@@ -109,19 +97,11 @@ export const WalletProvider = ({ children }) => {
       );
 
       const { signature } = await window.solana.signAndSendTransaction(transaction);
-      await connection.confirmTransaction(signature, 'confirmed');
+      await connection.confirmTransaction(signature);
 
       return signature;
 
     } catch (error) {
-      console.error('Transaction error:', error);
-      
-      if (error.message?.includes('rejected')) {
-        throw new Error('Transaction rejected');
-      } else if (error.message?.includes('insufficient')) {
-        throw new Error('Insufficient SOL');
-      }
-      
       throw new Error(error.message || 'Transaction failed');
     }
   };
